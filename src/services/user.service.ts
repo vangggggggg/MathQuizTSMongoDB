@@ -2,6 +2,7 @@ import { User } from "../models/user.models";
 import { UserDTO } from "../dto/user.create";
 import { validate } from "class-validator";
 import { plainToInstance } from "class-transformer";
+import { UserRepository } from "../repositories/user.repository";
 
 interface ResponseUser {
     message: string;
@@ -12,7 +13,7 @@ interface ResponseUser {
 export class UserService {
     static async createUser(userDTO: UserDTO): Promise<ResponseUser> {
         try {
-            // Validate dữ liệu từ DTO
+            // 🔹 1. Validate dữ liệu đầu vào
             const userInstance = plainToInstance(UserDTO, userDTO);
             const validationErrors = await validate(userInstance);
 
@@ -27,10 +28,8 @@ export class UserService {
                 };
             }
 
-            // Chuyển đổi dữ liệu từ DTO sang User
+            // 🔹 2. Chuyển DTO thành Entity
             const newUser = new User();
-            const errors: Record<string, string> = {};
-
             try {
                 newUser.username = userDTO.username;
                 newUser.password = userDTO.password;
@@ -39,19 +38,15 @@ export class UserService {
                 newUser.dateOfBirth = new Date(userDTO.dateOfBirth);
                 newUser.phoneNumber = userDTO.phoneNumber;
             } catch (error) {
-                errors["parsing"] = "Lỗi dữ liệu User";
-            }
-
-            if (Object.keys(errors).length > 0) {
                 return {
                     message: "Lỗi khi xử lý dữ liệu người dùng",
                     isSuccess: false,
-                    errors,
+                    errors: { parsing: "Lỗi chuyển đổi dữ liệu" },
                 };
             }
 
-            // Lưu vào database
-            await newUser.save();
+            // 🔹 3. Lưu vào database thông qua Repository
+            await UserRepository.createUser(newUser);
 
             return {
                 message: "Tạo người dùng thành công!",
