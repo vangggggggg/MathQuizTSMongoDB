@@ -1,18 +1,14 @@
 import { IUser, User } from "../models/user.models";
 import { UserDTO } from "../dto/user.create";
 import { UserRequest } from "../dto/user.request"
+import { ResponseUser } from "../dto/user.reponse";
 import { validate } from "class-validator";
 import { plainToInstance } from "class-transformer";
 import { UserRepository } from "../repositories/user.repository";
+import { ErrorHandler } from "../errors/user.error.handle";
 import bcrypt from "bcryptjs";
 
 const userRepository = new UserRepository();
-
-interface ResponseUser {
-    message: string;
-    isSuccess: boolean;
-    errors?: Record<string, string>;
-}
 
 export class UserService {
     static async hashPassword(password: string): Promise<string> {
@@ -29,54 +25,27 @@ export class UserService {
             // 🔹 1. Validate dữ liệu đầu vào
             const userInstance = plainToInstance(UserRequest, userRequest);
             const validationErrors = await validate(userInstance);
-
             if (validationErrors.length > 0) {
-                return {
-                    message: "Dữ liệu không hợp lệ",
-                    isSuccess: false,
-                    errors: validationErrors.reduce((acc, err) => {
-                        acc[err.property] = Object.values(err.constraints || {}).join(", ");
-                        return acc;
-                    }, {} as Record<string, string>),
-                };
+                return ErrorHandler.handleValidationErrors(validationErrors);
             }
+
             try {
                 const user: IUser | null = await userRepository.findUserByUsername(userRequest.username);
 
-                if (!user) {
-                    return {
-                        message: "Người dùng không tồn tại!",
-                        isSuccess: false,
-                    };
-                }
+                if (!user) return ErrorHandler.handleUserNotFound();
 
                 const isPasswordValid = await this.comparePassword(userRequest.password, user.password);
-                if (!isPasswordValid) {
-                    return {
-                        message: "Mật khẩu không chính xác!",
-                        isSuccess: false,
-                    };
-                }
+                if (!isPasswordValid) return ErrorHandler.handleIncorrectPassword();
 
-                // Nếu qua được cả 2 bước kiểm tra, tức là đăng nhập thành công
                 return {
                     message: "Đăng nhập người dùng thành công!",
                     isSuccess: true,
                 };
-
             } catch (error) {
-                return {
-                    message: "Lỗi khi xử lý dữ liệu người dùng",
-                    isSuccess: false,
-                    errors: { parsing: "Lỗi chuyển đổi dữ liệu" },
-                };
+                return ErrorHandler.handleDataParsingError();
             }
         } catch (error) {
-            return {
-                message: "Lỗi hệ thống khi tạo người dùng",
-                isSuccess: false,
-                errors: { system: (error as Error).message },
-            };
+            return ErrorHandler.handleSystemError(error, "Lỗi hệ thống khi đăng nhập");
         }
     }
 
@@ -87,14 +56,7 @@ export class UserService {
             const validationErrors = await validate(userInstance);
 
             if (validationErrors.length > 0) {
-                return {
-                    message: "Dữ liệu không hợp lệ",
-                    isSuccess: false,
-                    errors: validationErrors.reduce((acc, err) => {
-                        acc[err.property] = Object.values(err.constraints || {}).join(", ");
-                        return acc;
-                    }, {} as Record<string, string>),
-                };
+                return ErrorHandler.handleValidationErrors(validationErrors);
             }
 
             // 🔹 2. Chuyển DTO thành Entity
@@ -107,11 +69,7 @@ export class UserService {
                 newUser.dateOfBirth = new Date(userDTO.dateOfBirth);
                 newUser.phoneNumber = userDTO.phoneNumber;
             } catch (error) {
-                return {
-                    message: "Lỗi khi xử lý dữ liệu người dùng",
-                    isSuccess: false,
-                    errors: { parsing: "Lỗi chuyển đổi dữ liệu" },
-                };
+                return ErrorHandler.handleDataParsingError();
             }
 
             // 🔹 3. Lưu vào database thông qua Repository
@@ -122,12 +80,7 @@ export class UserService {
                 isSuccess: true,
             };
         } catch (error) {
-            return {
-                message: "Lỗi hệ thống khi tạo người dùng",
-                isSuccess: false,
-                errors: { system: (error as Error).message },
-            };
+            return ErrorHandler.handleSystemError(error, "Lỗi hệ thống khi tạo người dùng");
         }
     }
-
 }
